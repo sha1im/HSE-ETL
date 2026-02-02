@@ -1,8 +1,10 @@
 import json
 import csv
 
+from datetime import datetime
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 
 COLUMNS = ["name", "species", "favFoods", "birthYear", "photo"]
@@ -25,19 +27,16 @@ def JsonToCsv(input_path: str, output_path: str) -> None:
             ]
             writer.writerow(row)
 
-def LoadCsvToSql():
-    
-
 with DAG (
-        'homework(2)',
-        start_date=datetime(2025, 1, 1)
+        'homework_2',
+        start_date=datetime(2025, 1, 1),
         schedule=None,
         catchup=False,
         tags=["Homework N2" , "JSON->SQL"],
         ) as dag:
 
     t1 = PythonOperator(
-        task_id="Extract",
+        task_id="Transform",
         python_callable=JsonToCsv,
         op_args=[
             "/opt/airflow/data/in/pets-data.json",
@@ -45,7 +44,15 @@ with DAG (
         ]
     )
     
-    t2 = PythonOperator(
+    t2 = SQLExecuteQueryOperator(
         task_id="Load",
-        python_callable=LoadCsvToSql
+        conn_id="Postgres_airflow",
+        sql="""
+            TRUNCATE TABLE pets;
+
+            COPY pets FROM '/data/processed/pets-data.csv'
+            WITH (FORMAT csv, DELIMITER '|', HEADER true, ENCODING 'UTF8');
+        """
     )
+
+    t1 >> t2
